@@ -1,0 +1,42 @@
+volumes:
+  yolo_crops:
+
+services:
+  remoteyolo:
+    build:
+      context: ./RemoteYOLO
+      dockerfile: Dockerfile
+    ports:
+      - "44777:44777"
+    command: >
+      sh -c ". venv/bin/activate &&
+      uvicorn api:app --host 0.0.0.0 --port 44777 --log-level warning --loop asyncio"
+    volumes:
+      - yolo_crops:/tmp/yolo-crops
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  clip:
+    build:
+      context: .
+      dockerfile: CLIP/Dockerfile
+    working_dir: /app/CLIP
+    ports:
+      - "44778:44778"
+    command: >
+      sh -c "uvicorn clip_api:app --host 0.0.0.0 --port 44778 --log-level warning"
+    volumes:
+      - yolo_crops:/tmp/yolo-crops
+      - ./Datasets/TMDb:/app/Datasets/TMDb:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
