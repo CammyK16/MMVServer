@@ -18,12 +18,13 @@ titles = [row["description"] for row in metadata]
 
 model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
 model = model.to("cuda")
+model = model.half()
 model.eval()
 tokenizer = open_clip.get_tokenizer('ViT-B-32')
 
 def embed_image(img_path):
-    with torch.no_grad(), torch.autocast("cuda"):
-        image = preprocess(Image.open(img_path).convert("RGB")).unsqueeze(0).to("cuda", non_blocking=True)
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        image = preprocess(Image.open(img_path).convert("RGB")).unsqueeze(0).to("cuda", non_blocking=True, dtype=torch.float16)
         image_features = model.encode_image(image).float()
         image_features = F.normalize(image_features, p=2, dim=1)
 
@@ -43,4 +44,10 @@ def predict_title(query_image_path, k=1, threshold = None):
 
 index = faiss.read_index(f"{ROOT_DIR}/embeddings/index_ViT-B-32_laion2b_s34b_b79k_UPDATED.faiss")
 res = faiss.StandardGpuResources()
-gpu_index = faiss.index_cpu_to_gpu(res, 0, index)
+try:
+    cloner_options = faiss.GpuClonerOptions()
+    if hasattr(cloner_options, "useFloat16"):
+        cloner_options.useFloat16 = True
+    gpu_index = faiss.index_cpu_to_gpu(res, 0, index, cloner_options)
+except (AttributeError, TypeError):
+    gpu_index = faiss.index_cpu_to_gpu(res, 0, index)

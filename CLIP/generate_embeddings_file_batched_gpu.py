@@ -28,6 +28,7 @@ N = len(paths)
 
 model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
 model = model.to("cuda")
+model = model.half()
 model.eval()
 tokenizer = open_clip.get_tokenizer('ViT-B-32')
 
@@ -37,7 +38,8 @@ ds = PosterSet(paths, preprocess)
 dl = DataLoader(ds, batch_size=BATCH_SIZE, shuffle=False, num_workers = 8, pin_memory=True, prefetch_factor=4)
 
 with torch.no_grad(), torch.autocast("cuda"):
-    x0 = preprocess(Image.open(paths[0]).convert("RGB")).unsqueeze(0).to("cuda", non_blocking = True)
+with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+    x0 = preprocess(Image.open(paths[0]).convert("RGB")).unsqueeze(0).to("cuda", non_blocking = True, dtype=torch.float16)
     d = int(model.encode_image(x0).shape[-1])
 
 res = faiss.StandardGpuResources()
@@ -45,9 +47,9 @@ cfg = faiss.GpuIndexFlatConfig()
 cfg.device = 0
 gpu_index = faiss.GpuIndexFlatIP(res, d, cfg)
 
-with torch.no_grad(), torch.autocast("cuda"):
+with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
     for batch, i in tqdm(dl, total=math.ceil(N/BATCH_SIZE)):
-        batch = batch.to("cuda", non_blocking = True)
+        batch = batch.to("cuda", non_blocking = True, dtype=torch.float16)
         image_features = model.encode_image(batch).float()
         
         image_features_norm = F.normalize(image_features, p=2, dim=1)

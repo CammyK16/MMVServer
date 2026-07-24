@@ -61,11 +61,12 @@ def main():
         'ViT-g-14', pretrained='laion2b_s12b_b42k'
     )
     model = model.to("cuda")
+    model = model.half()
     model.eval()
 
     # Verify dimensionality matches
-    with torch.no_grad(), torch.autocast("cuda"):
-        x0 = preprocess(Image.open(new_paths[0]).convert("RGB")).unsqueeze(0).to("cuda")
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        x0 = preprocess(Image.open(new_paths[0]).convert("RGB")).unsqueeze(0).to("cuda", dtype=torch.float16)
         d = int(model.encode_image(x0).shape[-1])
 
     if d != index.d:
@@ -77,9 +78,9 @@ def main():
                     num_workers=8, pin_memory=True, prefetch_factor=4)
 
     added = 0
-    with torch.no_grad(), torch.autocast("cuda"):
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
         for batch, _ in tqdm(dl, total=math.ceil(N / args.batch_size), desc="Embedding"):
-            batch = batch.to("cuda", non_blocking=True)
+            batch = batch.to("cuda", non_blocking=True, dtype=torch.float16)
             image_features = model.encode_image(batch).float()
             image_features = F.normalize(image_features, p=2, dim=1)
             arr = image_features.detach().cpu().numpy().astype("float32")
