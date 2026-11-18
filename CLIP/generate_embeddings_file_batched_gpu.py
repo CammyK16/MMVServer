@@ -37,7 +37,6 @@ BATCH_SIZE = 512
 ds = PosterSet(paths, preprocess)
 dl = DataLoader(ds, batch_size=BATCH_SIZE, shuffle=False, num_workers = 8, pin_memory=True, prefetch_factor=4)
 
-with torch.no_grad(), torch.autocast("cuda"):
 with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
     x0 = preprocess(Image.open(paths[0]).convert("RGB")).unsqueeze(0).to("cuda", non_blocking = True, dtype=torch.float16)
     d = int(model.encode_image(x0).shape[-1])
